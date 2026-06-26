@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wendy.sh/schemas/wendy.json",
+  "appId": "arvit-robot-control",
+  "version": "0.1.0",
+  "platform": "wendyos",
+  "language": "python",
+  "entitlements": [
+    { "type": "network", "mode": "host" },
+    { "type": "usb" },
+    { "type": "persist", "name": "arvit-robot-control-maps", "path": "/data" }
+  ],
+  "python": {}
+}
