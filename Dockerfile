@@ -59,9 +59,11 @@ COPY pyproject.toml README.md ./
 # Make the source tree importable (no editable install needed).
 ENV PYTHONPATH=/app
 
-# Default: run the pure-logic test suite. Override to launch on the robot, e.g.
-#   docker run --rm arvit-robot-control \
-#     ros2 launch arvit_robot_control slam_bringup.launch.py
-# (launch needs the real robot + L1 + drivers; it will not run in this image
-# without hardware.)
-CMD ["pytest", "-q"]
+# Default: print the deployable base_link<-unilidar_lidar static-TF command
+# (the head-mount homogeneous transform) computed by the same code the tests
+# verify — a visible, hardware-free artifact. Override to run the tests or to
+# launch on the robot:
+#   container run --rm arvit-robot-control pytest -q
+#   ros2 launch arvit_robot_control slam_bringup.launch.py   # needs robot + L1
+# NOTE: the ROS base ships python3 (no bare `python` symlink) — use python3.
+CMD ["python3", "-c", "from arvit_robot_control.slam.extrinsics import HeadMount; hm=HeadMount(); print('base_link<-unilidar_lidar static TF (measure pitch/translation on hardware):'); print('  ros2 run tf2_ros static_transform_publisher ' + ' '.join(hm.to_static_transform_publisher_args()))"]
