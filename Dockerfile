@@ -22,7 +22,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    # The ROS Humble base ships the `launch_testing` / `launch_testing_ros`
+    # pytest entrypoints, which are incompatible with the pytest uv installs and
+    # crash collection with a PluginValidationError. This suite is pure unit
+    # tests needing no third-party pytest plugin, so disable plugin autoload.
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 
 # ---- deploy-target ROS 2 deps (the fusion + navigation stack) ----
 # robot_localization runs the two EKFs; nav2 consumes the TF chain. These are
