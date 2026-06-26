@@ -1,0 +1,26 @@
+# Docker path for arvit-robot-control. Mirrors the Apple `container` path
+# (scripts/container-up.sh), built from the SAME Dockerfile.
+#
+#   docker compose run --rm robot-control          # run the pure-logic tests
+#   docker compose build                            # build the Humble image
+#
+# The default command runs the pytest suite (pure-logic core: extrinsics +
+# timesync). The ROS 2 launch (slam_bringup.launch.py) needs the real robot,
+# the L1, and its drivers, so it is NOT run by compose -- deploy it on the Orin.
+#
+# This package exposes no network service, so no ports are published. If a
+# future variant serves something over HTTP, bind published ports to 127.0.0.1
+# only (project convention).
+services:
+  robot-control:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arvit-robot-control:latest
+    container_name: arvit-robot-control
+    env_file:
+      - path: .env
+        required: false
+    # No ports. No host network for the test run. On the Orin, the deploy
+    # invocation would add the robot's DDS network + devices instead.
+    command: ["pytest", "-q"]

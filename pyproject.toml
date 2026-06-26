@@ -1,0 +1,36 @@
+[project]
+name = "arvit-robot-control"
+version = "0.1.0"
+description = "ARVIT LiDAR-inertial-odometry (LIO) integration: head-mount SE(3) transform, Point-LIO config, two-EKF fusion, and the ROS 2 Humble bring-up for the head-mounted Unitree L1 4D LiDAR."
+readme = "README.md"
+# Python 3.10 is the ROS 2 Humble system interpreter on Ubuntu 22.04 / Jetson
+# Orin. The pure-logic core is tested locally on 3.11 (uv). Keep the floor at
+# 3.10 so the package installs cleanly inside the Humble container.
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    # The pure-logic core (extrinsics, timesync) needs only numpy. ROS 2
+    # (rclpy, launch, launch_ros, robot_localization, nav2) is a DEPLOY-TARGET
+    # dependency provided by the Humble base image -- intentionally NOT listed
+    # here so the package installs and tests on a plain machine.
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["arvit_robot_control"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+# Import the package straight from the source tree without an editable install,
+# so `uv run pytest` works after a bare `uv pip install numpy pytest`.
+pythonpath = ["."]

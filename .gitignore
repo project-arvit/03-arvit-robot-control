@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# uv / venv
+.venv/
+
+# pytest
+.pytest_cache/
+
+# Secrets (commit .env.example only)
+.env
+
+# Point clouds / saved maps
+*.pcd
+PCD/
+
+# OS
+.DS_Store
+
+# ==============================
+# ======   GITIGNORE   =========
+# ==============================
+
+/samples
+samples/*
+
+.DS_Store
+
+/.idea
+.idea/*
+
+/.vscode
+.vscode/*
+
+# ==============================
+# ======   GITIGNORE   =========
+# ==============================
+
+
+# Git identity configuration (contains email addresses)
+.git-identities.conf
+
+# Ignore all .env files
+.env*
+# But don't ignore the templates
+!.env.example
+!.env.template
+!template.env
+!.env.local.example
+!.env.production.example
+
+# ==============================
+# ======   GITIGNORE   =========
+# ==============================

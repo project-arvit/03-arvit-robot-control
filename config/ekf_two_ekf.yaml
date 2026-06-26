@@ -1,0 +1,147 @@
+# robot_localization two-EKF config for ARVIT.
+#
+# This is the FUSION layer that sits DOWNSTREAM of Point-LIO. Point-LIO (run on
+# the L1's built-in IMU, Architecture A) emits ~250 Hz LiDAR-inertial odometry.
+# That odometry, plus the BODY IMU and the sport-mode odometry, are fused here
+# into one clean `map -> odom -> base_link` TF chain for Nav2.
+#
+# Two-EKF pattern (Tom Moore / Steve Macenski):
+#   * ekf_local  publishes  odom -> base_link  -- CONTINUOUS, never jumps. Fed by
+#                relative/velocity sources only (LIO odom, IMU attitude+rates,
+#                sport-mode velocities). Smooth for local control / costmaps.
+#   * ekf_global publishes  map  -> base_link  internally but is configured with
+#                `world_frame: map`, so robot_localization emits the
+#                map -> odom correction TF. Fed by the same continuous sources
+#                PLUS the absolute AprilTag/relocalization pose -- ALLOWED to jump.
+#
+# Frame ids (REP-103 / REP-105): map (global, jump-prone) -> odom (continuous,
+# drifts) -> base_link (robot body).
+#
+# config_matrix legend (15-dim boolean order):
+#   [ x,     y,     z,
+#     roll,  pitch, yaw,
+#     vx,    vy,    vz,
+#     vroll, vpitch,vyaw,
+#     ax,    ay,    az ]
+#
+# Rule of thumb that this config follows: fuse a source's STRONGEST signal and
+# nothing it estimates poorly. LIO -> pose + velocity. Body IMU -> roll/pitch +
+# angular RATES only (NOT absolute yaw -- a 6-axis IMU has no heading). Sport
+# odom -> body velocities only (leg odom drifts in absolute position).
+
+# =====================================================================
+# LOCAL EKF -- odom -> base_link (continuous, smooth, never jumps)
+# =====================================================================
+ekf_local:
+    ros__parameters:
+        frequency: 50.0
+        sensor_timeout: 0.1
+        two_d_mode: false               # full 3D. The dog pitches/rolls on a legged gait and
+                                        #   the L1 sees ramps/stairs; flattening to 2D throws
+                                        #   that away. Set true ONLY for a strictly planar site.
+        publish_tf: true
+        publish_acceleration: false
+        reset_on_time_jump: true
+
+        map_frame: map
+        odom_frame: odom
+        base_link_frame: base_link
+        world_frame: odom               # LOCAL filter => world is `odom`
+
+        # --- Point-LIO LiDAR-inertial odometry (pose + twist) ---
+        odom0: /Odometry               # nav_msgs/Odometry from Point-LIO
+        odom0_config: [true,  true,  true,    # x, y, z  (LIO position is good locally)
+                       false, false, true,    # roll, pitch from IMU sources; take LIO yaw
+                       true,  true,  true,    # vx, vy, vz
+                       false, false, true,    # vyaw
+                       false, false, false]
+        odom0_queue_size: 10
+        odom0_differential: false       # LIO pose is already a smooth local estimate
+        odom0_relative: false
+        odom0_nodelay: true
+
+        # --- Body IMU (orientation roll/pitch + angular rates ONLY) ---
+        imu0: /imu/body                # sensor_msgs/Imu from the Go2 body IMU
+        imu0_config: [false, false, false,    # no absolute position from an IMU
+                      true,  true,  false,     # roll, pitch absolute; NOT yaw (no magnetometer)
+                      false, false, false,
+                      true,  true,  true,      # vroll, vpitch, vyaw (gyro rates -- strong)
+                      false, false, false]     # accel left OUT (noisy on a legged gait;
+                                               #   flip to true only after tuning)
+        imu0_differential: false
+        imu0_relative: false
+        imu0_queue_size: 10
+        imu0_remove_gravitational_acceleration: true
+
+        # --- Sport-mode odometry (body velocities only) ---
+        odom1: /sportmode/odom         # nav_msgs/Odometry derived from rt/sportmodestate
+        odom1_config: [false, false, false,   # absolute leg-odom position drifts -> don't fuse
+                       false, false, false,
+                       true,  true,  false,    # vx, vy in base_link
+                       false, false, true,     # vyaw (sport-mode yaw_speed)
+                       false, false, false]
+        odom1_queue_size: 10
+        odom1_differential: false
+        odom1_relative: false
+
+        # Process noise + initial estimate covariance left at robot_localization
+        # defaults for the hackathon; TUNE per-source covariances before the UKF.
+        # (Covariances matter more than the filter choice.)
+        process_noise_covariance: []    # [] => use the package default 15x15
+        initial_estimate_covariance: []
+
+# =====================================================================
+# GLOBAL EKF -- map -> odom (fuses absolute relocalization; may jump)
+# =====================================================================
+ekf_global:
+    ros__parameters:
+        frequency: 30.0
+        sensor_timeout: 0.2
+        two_d_mode: false
+        publish_tf: true                # emits the map -> odom correction TF
+        publish_acceleration: false
+        reset_on_time_jump: true
+
+        map_frame: map
+        odom_frame: odom
+        base_link_frame: base_link
+        world_frame: map                # GLOBAL filter => world is `map`
+
+        # --- same continuous sources as the local filter (keeps map smooth
+        #     between relocalizations) ---
+        odom0: /Odometry               # Point-LIO odometry
+        odom0_config: [true,  true,  true,
+                       false, false, true,
+                       true,  true,  true,
+                       false, false, true,
+                       false, false, false]
+        odom0_queue_size: 10
+        odom0_differential: false
+        odom0_nodelay: true
+
+        imu0: /imu/body
+        imu0_config: [false, false, false,
+                      true,  true,  false,
+                      false, false, false,
+                      true,  true,  true,
+                      false, false, false]
+        imu0_differential: false
+        imu0_queue_size: 10
+        imu0_remove_gravitational_acceleration: true
+
+        # --- ABSOLUTE pose from AprilTag / relocalization (the global fix) ---
+        # This is what makes the global filter "jump" to correct drift. It is
+        # an absolute pose in the `map` frame; fuse position + full orientation.
+        pose0: /relocalization/pose    # geometry_msgs/PoseWithCovarianceStamped
+        pose0_config: [true,  true,  true,    # x, y, z absolute in map
+                       true,  true,  true,     # roll, pitch, yaw absolute
+                       false, false, false,
+                       false, false, false,
+                       false, false, false]
+        pose0_differential: false       # absolute, not delta
+        pose0_relative: false
+        pose0_queue_size: 5
+        pose0_nodelay: false
+
+        process_noise_covariance: []
+        initial_estimate_covariance: []

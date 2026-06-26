@@ -1,0 +1,78 @@
+# Point-LIO config for the Unitree 4D LiDAR L1 -- ARVIT Architecture A.
+#
+# Architecture A: Point-LIO runs on the L1's BUILT-IN IMU. The laser and the
+# IMU share one rigid housing, one device clock, and the factory extrinsic, so
+# there is NO time-sync problem and NO extrinsic to solve INSIDE the LIO. The
+# head-mount geometry (L1 upside-down + tilted forward on the dog's snout) is
+# handled OUTSIDE the LIO as the single static SE(3) transform
+# `base_link <- unilidar_lidar` (see arvit_robot_control/slam/extrinsics.py).
+# The body IMU + sport-mode odom join LATER at the robot_localization EKF
+# layer -- do NOT feed the body IMU into Point-LIO.
+#
+# Values follow unitreerobotics/point_lio_unilidar `config/unilidar_l1.yaml`.
+# This file is read as DATA by the launch layer at deploy time.
+
+common:
+    lid_topic: "/unilidar/cloud"        # sensor_msgs/PointCloud2 in -- from the L1 itself
+    imu_topic: "/unilidar/imu"          # sensor_msgs/Imu in -- from the SAME L1 device
+    con_frame: false                    # combine N LiDAR frames into one
+    con_frame_num: 1
+    cut_frame: false                    # cut one frame into subframes
+    cut_frame_time_interval: 0.1
+    time_lag_imu_to_lidar: 0.0          # IMU stamp moved onto LiDAR timeline by SUBTRACTING
+                                        #   this. 0.0 because the L1 SDK stamps cloud + IMU on
+                                        #   one device clock (Architecture A => no sync work).
+
+preprocess:
+    lidar_type: 5                       # 5 = UNILIDAR (AVIA=1 VELO16=2 OUST64=3 HESAI=4 UNILIDAR=5)
+    scan_line: 18                       # number of scan lines (-> N_SCANS)
+    timestamp_unit: 0                   # per-point time unit: 0=SEC 1=MS 2=US 3=NS
+                                        #   (SEC; scaled x1000 -> ms internally for de-skew)
+    blind: 0.5                          # drop points with range <= 0.5 m
+
+mapping:
+    imu_en: true
+    start_in_aggressive_motion: false   # expect a STATIONARY start (gravity/bias init)
+    extrinsic_est_en: false             # trust the factory IMU->LiDAR extrinsic; do NOT
+                                        #   online-estimate it under aggressive legged-gait motion
+    imu_time_inte: 0.004                # 1 / IMU_freq => 250 Hz; covariance-propagation dt threshold
+    satu_acc: 30.0                      # accel saturation clamp (unit-agnostic)
+    satu_gyro: 35                       # gyro saturation clamp (unit-agnostic)
+    acc_norm: 9.81                      # accel reported in m/s^2 (use 1.0 if IMU reports in g)
+    lidar_meas_cov: 0.01
+    acc_cov_output: 500                 # active when use_imu_as_input=0 (OUTPUT model)
+    gyr_cov_output: 1000
+    b_acc_cov: 0.0001
+    b_gyr_cov: 0.0001
+    imu_meas_acc_cov: 0.1
+    imu_meas_omg_cov: 0.1
+    gyr_cov_input: 0.01                 # active only if use_imu_as_input=1 (INPUT model)
+    acc_cov_input: 0.1
+    plane_thr: 0.1
+    match_s: 81
+    fov_degree: 180
+    det_range: 100.0                    # max usable range (m)
+    gravity_align: true                 # align world Z to measured gravity at init
+    gravity: [0.0, 0.0, -9.81]          # world gravity vector (m/s^2)
+    gravity_init: [0.0, 0.0, -9.81]
+    # ---- transform #1: internal IMU -> LiDAR (factory; already solved) ----
+    # This is NOT the head-mount transform. It is the ~1.3 cm offset and
+    # identity rotation between the IMU and the laser INSIDE the one L1
+    # housing. The head-mount `base_link <- unilidar_lidar` lives in the TF
+    # tree (extrinsics.py / the static_transform_publisher), NOT here.
+    extrinsic_T: [0.007698, 0.014655, -0.00667]   # IMU -> LiDAR translation (m); ~1.3 cm
+    extrinsic_R: [1.0, 0.0, 0.0,                   # IMU -> LiDAR rotation = IDENTITY
+                  0.0, 1.0, 0.0,                   #   (axes factory-aligned in the housing)
+                  0.0, 0.0, 1.0]
+
+odometry:
+    publish_odometry_without_downsample: enable    # publish odom per scan/point (high-freq, ~250 Hz)
+
+publish:
+    path_en: true
+    scan_publish_en: true
+    scan_bodyframe_pub_en: false
+
+pcd_save:
+    pcd_save_en: true                   # save the accumulated map to PCD/scans.pcd
+    interval: -1                        # -1 => all frames in one file (large captures risk OOM)
